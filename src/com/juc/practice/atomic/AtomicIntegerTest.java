@@ -2,6 +2,7 @@ package com.juc.practice.atomic;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicStampedReference;
 
 /**
  * 使用 AtomicInteger 解决 VolatileTest.java 中使用 volatile 修饰变量的原子性问题
@@ -70,6 +71,45 @@ class ABAQuestion {
         }, "B").start();
     }
 }
-/*
-使用带时间戳的原子引用 AtomicStampedReference<V> 解决 CAS 中的 ABA 问题
+
+/**
+ * 使用带时间戳的原子引用 AtomicStampedReference<V> 解决 CAS 中的 ABA 问题
  */
+class ABASolve {
+    public static void main(String[] args) {
+        AtomicStampedReference<Integer> asr = new AtomicStampedReference<>(0, 1);
+
+        new Thread(() -> {
+            int stamp = asr.getStamp();
+            System.out.println(Thread.currentThread().getName() + " 第一次版本号：" + stamp);
+            try {
+                /* 等到 B 线程也拿到同样版本号的数值 */
+                TimeUnit.SECONDS.sleep(1);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println(
+                    Thread.currentThread().getName() +
+                            " " + asr.compareAndSet(0, 1, asr.getStamp(), asr.getStamp() + 1)
+                            + " current value: " + asr.getReference() + ", stamp: " + asr.getStamp());
+            System.out.println(
+                    Thread.currentThread().getName() +
+                            " " + asr.compareAndSet(1, 0, asr.getStamp(), asr.getStamp() + 1)
+                            + " current value: " + asr.getReference() + ", stamp: " + asr.getStamp());
+        }, "偷梁换柱之 A 线程").start();
+
+        new Thread(() -> {
+            int stamp = asr.getStamp();
+            System.out.println(Thread.currentThread().getName() + " 第一次版本号：" + stamp);
+            try {
+                /* 这个睡眠操作的目的是让 A 线程执行完毕 */
+                TimeUnit.SECONDS.sleep(3);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println(Thread.currentThread().getName()
+                    + " " + asr.compareAndSet(0, 20, stamp, stamp + 1)
+                    + " current value: " + asr.getReference() + ", stamp: " + asr.getStamp());
+        }, "B").start();
+    }
+}
